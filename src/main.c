@@ -71,7 +71,7 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
 	/* If we have an LED, match its state to the button's. */
 	int val = gpio_pin_get_dt(&button);
 
-	if (val == 0)
+	if (val > 0)
 	{
 		printk("Button pressed");
 		gpio_pin_toggle_dt(&buzzer);
