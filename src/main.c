@@ -17,6 +17,7 @@ LOG_MODULE_REGISTER(main);
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/i2c.h>
 #include <zephyr/sys/util.h>
 
 #define STRIP_NODE DT_ALIAS(led_strip)
@@ -96,125 +97,153 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
 #define W5500_NODE DT_ALIAS(eth_w5500)
 static const struct device *w5500_device = DEVICE_DT_GET(W5500_NODE);
 
-/*  SD Card  */
-#include <zephyr/storage/disk_access.h>
-#include <zephyr/fs/fs.h>
-#include <ff.h>
+// Relays
+#define I2C_NODE DT_ALIAS(i2c0)
+static const struct device *i2c_device = DEVICE_DT_GET(I2C_NODE);
 
-static int lsdir(const char *path);
+/****************************************************** The macro defines the TCA9554PWR information ******************************************************/
 
-static FATFS fat_fs;
-/* mounting info */
-static struct fs_mount_t mp = {
-	.type = FS_FATFS,
-	.fs_data = &fat_fs,
-};
+#define TCA9554_ADDRESS 0x20	  // TCA9554PWR I2C address
+#define TCA9554_INPUT_REG 0x00	  // Input register,input level
+#define TCA9554_OUTPUT_REG 0x01	  // Output register, high and low level output
+#define TCA9554_Polarity_REG 0x02 // The Polarity Inversion register (register 2) allows polarity inversion of pins defined as inputs by the Configuration register.
+#define TCA9554_CONFIG_REG 0x03	  // Configuration register, mode configuration
 
-/*
- *  Note the fatfs library is able to mount only strings inside _VOLUME_STRS
- *  in ffconf.h
- */
-static const char *disk_mount_pt = "/SD:";
+#define Low 0
+#define High 1
+#define EXIO_PIN1 1
+#define EXIO_PIN2 2
+#define EXIO_PIN3 3
+#define EXIO_PIN4 4
+#define EXIO_PIN5 5
+#define EXIO_PIN6 6
+#define EXIO_PIN7 7
+#define EXIO_PIN8 8
 
-static int lsdir(const char *path)
+/*****************************************************  Operation register REG   ****************************************************/
+uint8_t Read_REG(uint8_t REG);				  // Read the value of the TCA9554PWR register REG
+uint8_t Write_REG(uint8_t REG, uint8_t Data); // Write Data to the REG register of the TCA9554PWR
+/********************************************************** Set EXIO mode **********************************************************/
+void Mode_EXIO(uint8_t Pin, uint8_t State); // Set the mode of the TCA9554PWR Pin. The default is Output mode (output mode or input mode). State: 0= Output mode 1= input mode
+void Mode_EXIOS(uint8_t PinState);			// Set the mode of the 7 pins from the TCA9554PWR with PinState
+/********************************************************** Read EXIO status **********************************************************/
+uint8_t Read_EXIO(uint8_t Pin);	 // Read the level of the TCA9554PWR Pin
+uint8_t Read_EXIOS(uint8_t REG); // Read the level of all pins of TCA9554PWR, the default read input level state, want to get the current IO output state, pass the parameter TCA9554_OUTPUT_REG, such as Read_EXIOS(TCA9554_OUTPUT_REG);
+/********************************************************** Set the EXIO output status **********************************************************/
+bool Set_EXIO(uint8_t Pin, uint8_t State); // Sets the level state of the Pin without affecting the other pins
+bool Set_EXIOS(uint8_t PinState);		   // Set 7 pins to the PinState state such as :PinState=0x23, 0010 0011 state (the highest bit is not used)
+/********************************************************** Flip EXIO state **********************************************************/
+bool Set_Toggle(uint8_t Pin); // Flip the level of the TCA9554PWR Pin
+/********************************************************* TCA9554PWR Initializes the device ***********************************************************/
+void TCA9554PWR_Init(uint8_t PinMode, uint8_t PinState); // Set the seven pins to PinState state, for example :PinState=0x23, 0010 0011 State (the highest bit is not used) (Output mode or input mode) 0= Output mode 1= Input mode. The default value is output mode
+
+/*****************************************************  Operation register REG   ****************************************************/
+uint8_t Read_REG(uint8_t REG) // Read the value of the TCA9554PWR register REG
 {
-	int res;
-	struct fs_dir_t dirp;
-	static struct fs_dirent entry;
-
-	fs_dir_t_init(&dirp);
-
-	/* Verify fs_opendir() */
-	res = fs_opendir(&dirp, path);
-	if (res)
+	uint8_t result = i2c_write(i2c_device, &REG, 1, TCA9554_ADDRESS);
+	if (result != 0)
 	{
-		printk("Error opening dir %s [%d]\n", path, res);
-		return res;
+		printf("Data Transfer Failure !!!\r\n");
 	}
-
-	printk("\nListing dir %s ...\n", path);
-	for (;;)
+	uint8_t bitsStatus;
+	i2c_read(i2c_device, &bitsStatus, 1, TCA9554_ADDRESS);
+	return bitsStatus;
+}
+uint8_t Write_REG(uint8_t REG, uint8_t Data) // Write Data to the REG register of the TCA9554PWR
+{
+	uint8_t buf[2] = {REG, Data};
+	uint8_t result = i2c_write(i2c_device, buf, 2, TCA9554_ADDRESS);
+	if (result != 0)
 	{
-		/* Verify fs_readdir() */
-		res = fs_readdir(&dirp, &entry);
-
-		/* entry.name[0] == 0 means end-of-dir */
-		if (res || entry.name[0] == 0)
-		{
-			break;
-		}
-
-		if (entry.type == FS_DIR_ENTRY_DIR)
-		{
-			printk("[DIR ] %s\n", entry.name);
-		}
-		else
-		{
-			printk("[FILE] %s (size = %zu)\n",
-				   entry.name, entry.size);
-		}
+		printf("Data write failure!!!\r\n");
+		return -1;
 	}
-
-	/* Verify fs_closedir() */
-	fs_closedir(&dirp);
-
-	return res;
+	return 0;
+}
+/********************************************************** Set EXIO mode **********************************************************/
+void Mode_EXIO(uint8_t Pin, uint8_t State) // Set the mode of the TCA9554PWR Pin. The default is Output mode (output mode or input mode). State: 0= Output mode 1= input mode
+{
+	uint8_t bitsStatus = Read_REG(TCA9554_CONFIG_REG);
+	uint8_t Data = (0x01 << (Pin - 1)) | bitsStatus;
+	uint8_t result = Write_REG(TCA9554_CONFIG_REG, Data);
+	if (result != 0)
+	{
+		printf("I/O Configuration Failure !!!\r\n");
+	}
+}
+void Mode_EXIOS(uint8_t PinState) // Set the mode of the 7 pins from the TCA9554PWR with PinState
+{
+	uint8_t result = Write_REG(TCA9554_CONFIG_REG, PinState);
+	if (result != 0)
+	{
+		printf("I/O Configuration Failure !!!\r\n");
+	}
+}
+/********************************************************** Read EXIO status **********************************************************/
+uint8_t Read_EXIO(uint8_t Pin) // Read the level of the TCA9554PWR Pin
+{
+	uint8_t inputBits = Read_REG(TCA9554_INPUT_REG);
+	uint8_t bitStatus = (inputBits >> (Pin - 1)) & 0x01;
+	return bitStatus;
+}
+uint8_t Read_EXIOS(uint8_t REG) // Read the level of all pins of TCA9554PWR, the default read input level state, want to get the current IO output state, pass the parameter TCA9554_OUTPUT_REG, such as Read_EXIOS(TCA9554_OUTPUT_REG);
+{
+	uint8_t inputBits = Read_REG(REG);
+	return inputBits;
 }
 
-static int mount_sd_card(void)
+/********************************************************** Set the EXIO output status **********************************************************/
+bool Set_EXIO(uint8_t Pin, uint8_t State) // Sets the level state of the Pin without affecting the other pins
 {
-	/* raw disk i/o */
-	static const char *disk_pdrv = "SD";
-	uint64_t memory_size_mb;
-	uint32_t block_count;
-	uint32_t block_size;
-
-	if (disk_access_init(disk_pdrv) != 0)
+	uint8_t Data;
+	if (State < 2 && Pin < 9 && Pin > 0)
 	{
-		LOG_ERR("Storage init ERROR!");
-		return -1;
-	}
-
-	if (disk_access_ioctl(disk_pdrv,
-						  DISK_IOCTL_GET_SECTOR_COUNT, &block_count))
-	{
-		LOG_ERR("Unable to get sector count");
-		return -1;
-	}
-	LOG_INF("Block count %u", block_count);
-
-	if (disk_access_ioctl(disk_pdrv,
-						  DISK_IOCTL_GET_SECTOR_SIZE, &block_size))
-	{
-		LOG_ERR("Unable to get sector size");
-		return -1;
-	}
-	printk("Sector size %u\n", block_size);
-
-	memory_size_mb = (uint64_t)block_count * block_size;
-	printk("Memory Size(MB) %u\n", (uint32_t)(memory_size_mb >> 20));
-
-	mp.mnt_point = disk_mount_pt;
-
-	int res = fs_mount(&mp);
-
-	if (res == FR_OK)
-	{
-		printk("Disk mounted.\n");
-		lsdir(disk_mount_pt);
+		uint8_t bitsStatus = Read_EXIOS(TCA9554_OUTPUT_REG);
+		if (State == 1)
+			Data = (0x01 << (Pin - 1)) | bitsStatus;
+		else if (State == 0)
+			Data = (~(0x01 << (Pin - 1))) & bitsStatus;
+		uint8_t result = Write_REG(TCA9554_OUTPUT_REG, Data);
+		if (result != 0)
+		{
+			printf("Failed to set GPIO!!!\r\n");
+			return 0;
+		}
+		return 1;
 	}
 	else
 	{
-		printk("Failed to mount disk - trying one more time\n");
-		res = fs_mount(&mp);
-		if (res != FR_OK)
-		{
-			printk("Error mounting disk.\n");
-			return -1;
-		}
+		printf("Parameter error, please enter the correct parameter!\r\n");
+		return 0;
 	}
-
-	return 0;
+}
+bool Set_EXIOS(uint8_t PinState) // Set 7 pins to the PinState state such as :PinState=0x23, 0010 0011 state (the highest bit is not used)
+{
+	uint8_t result = Write_REG(TCA9554_OUTPUT_REG, PinState);
+	if (result != 0)
+	{
+		printf("Failed to set GPIO!!!\r\n");
+		return 0;
+	}
+	return 1;
+}
+/********************************************************** Flip EXIO state **********************************************************/
+bool Set_Toggle(uint8_t Pin) // Flip the level of the TCA9554PWR Pin
+{
+	uint8_t bitsStatus = Read_EXIO(Pin);
+	uint8_t result = Set_EXIO(Pin, (bool)!bitsStatus);
+	if (!result)
+	{
+		printf("Failed to Toggle GPIO!!!\r\n");
+		return 0;
+	}
+	return 1;
+}
+/********************************************************* TCA9554PWR Initializes the device ***********************************************************/
+void TCA9554PWR_Init(uint8_t PinMode, uint8_t PinState) // Set the seven pins to PinState state, for example :PinState=0x23, 0010 0011 State  (Output mode or input mode) 0= Output mode 1= Input mode. The default value is output mode
+{
+	Set_EXIOS(PinState);
+	Mode_EXIOS(PinMode);
 }
 
 int main(void)
@@ -287,42 +316,25 @@ int main(void)
 		return 0;
 	}
 
-	/** SD card mount test **/
-	if (mount_sd_card())
+	if (device_is_ready(i2c_device))
 	{
-		printk("Failed to mount SD card\n");
-		return -1;
+		LOG_INF("i2c ready");
 	}
 	else
 	{
-		printk("Successfully mounted SD card\n");
+		LOG_INF("i2c not ready");
+		return 0;
 	}
 
-	char file_data_buffer[200];
-	struct fs_file_t data_filp;
-	fs_file_t_init(&data_filp);
-
-	ret = fs_unlink("/SD:/test_data.txt");
-
-	ret = fs_open(&data_filp, "/SD:/test_data.txt", FS_O_WRITE | FS_O_CREATE);
-	if (ret)
-	{
-		printk("%s -- failed to create file (err = %d)\n", __func__, ret);
-		return -2;
-	}
-	else
-	{
-		printk("%s - successfully created file\n", __func__);
-	}
-
-	sprintf(file_data_buffer, "hello world!\n");
-	ret = fs_write(&data_filp, file_data_buffer, strlen(file_data_buffer));
-	fs_close(&data_filp);
-
-	while (1)
-	{
-		k_sleep(K_MSEC(1));
-	}
-
+	TCA9554PWR_Init(0x00, 0x00);
+	/*
+		while (1)
+		{
+			Set_EXIOS(0b01010101);
+			k_msleep(1000);
+			Set_EXIOS(0b10101010);
+			k_msleep(1000);
+		}
+	*/
 	return 0;
 }
