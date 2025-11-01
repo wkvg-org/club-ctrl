@@ -40,6 +40,18 @@ static struct led_rgb pixels[STRIP_NUM_PIXELS];
 
 static const struct device *const strip = DEVICE_DT_GET(STRIP_NODE);
 
+/* The devicetree node identifier for the "buzzer" alias. */
+#define BUZZER_NODE DT_ALIAS(buzzer)
+
+/*
+ * A build error on this line means your board is unsupported.
+ * See the sample documentation for information on how to fix this.
+ */
+static const struct gpio_dt_spec buzzer = GPIO_DT_SPEC_GET(BUZZER_NODE, gpios);
+
+#define USB_SERIAL_NODE DT_ALIAS(usb_serial)
+static const struct device *esp_usb_serial_device = DEVICE_DT_GET(USB_SERIAL_NODE);
+
 /*
  * Get button configuration from the devicetree boot-btn alias. This is mandatory.
  */
@@ -52,23 +64,52 @@ static struct gpio_callback button_cb_data;
 void button_pressed(const struct device *dev, struct gpio_callback *cb,
 					uint32_t pins)
 {
+
+	size_t color = 0;
+	int rc;
 	printk("Button pressed at %" PRIu32 "\n", k_cycle_get_32());
+	/* If we have an LED, match its state to the button's. */
+	int val = gpio_pin_get_dt(&button);
+
+	if (val == 0)
+	{
+		printk("Button pressed");
+		gpio_pin_toggle_dt(&buzzer);
+		for (size_t cursor = 0; cursor < ARRAY_SIZE(pixels); cursor++)
+		{
+			memset(&pixels, 0x00, sizeof(pixels));
+			memcpy(&pixels[cursor], &colors[color], sizeof(struct led_rgb));
+
+			rc = led_strip_update_rgb(strip, pixels, STRIP_NUM_PIXELS);
+			if (rc)
+			{
+				LOG_ERR("couldn't update strip: %d", rc);
+			}
+
+			k_sleep(DELAY_TIME);
+		}
+
+		color = (color + 1) % ARRAY_SIZE(colors);
+	}
 }
 
-/* The devicetree node identifier for the "buzzer" alias. */
-#define BUZZER_NODE DT_ALIAS(buzzer)
-
-/*
- * A build error on this line means your board is unsupported.
- * See the sample documentation for information on how to fix this.
- */
-static const struct gpio_dt_spec buzzer = GPIO_DT_SPEC_GET(BUZZER_NODE, gpios);
+#define W5500_NODE DT_ALIAS(eth_w5500)
+static const struct device *w5500_device = DEVICE_DT_GET(W5500_NODE);
 
 int main(void)
 {
+	if (device_is_ready(esp_usb_serial_device))
+	{
+		LOG_INF("ESP USB Serial ready");
+	}
+	else
+	{
+		LOG_INF("ESP USB Serial not ready");
+		return 0;
+	}
+	printk("hello world");
+
 	int ret;
-	size_t color = 0;
-	int rc;
 
 	if (!gpio_is_ready_dt(&button))
 	{
@@ -115,33 +156,14 @@ int main(void)
 		return 0;
 	}
 
-	LOG_INF("Displaying pattern on strip");
-	while (1)
+	if (device_is_ready(w5500_device))
 	{
-
-		/* If we have an LED, match its state to the button's. */
-		int val = gpio_pin_get_dt(&button);
-
-		if (val == 0)
-		{
-
-			gpio_pin_toggle_dt(&buzzer);
-			for (size_t cursor = 0; cursor < ARRAY_SIZE(pixels); cursor++)
-			{
-				memset(&pixels, 0x00, sizeof(pixels));
-				memcpy(&pixels[cursor], &colors[color], sizeof(struct led_rgb));
-
-				rc = led_strip_update_rgb(strip, pixels, STRIP_NUM_PIXELS);
-				if (rc)
-				{
-					LOG_ERR("couldn't update strip: %d", rc);
-				}
-
-				k_sleep(DELAY_TIME);
-			}
-
-			color = (color + 1) % ARRAY_SIZE(colors);
-		}
+		LOG_INF("Ethernet ready");
+	}
+	else
+	{
+		LOG_INF("Ethernet not ready");
+		return 0;
 	}
 
 	return 0;
