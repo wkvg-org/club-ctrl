@@ -246,6 +246,10 @@ void TCA9554PWR_Init(uint8_t PinMode, uint8_t PinState) // Set the seven pins to
 	Mode_EXIOS(PinMode);
 }
 
+// Relays
+#define RTC_NODE DT_ALIAS(rtc)
+static const struct device *rtc_device = DEVICE_DT_GET(RTC_NODE);
+
 int main(void)
 {
 	if (device_is_ready(esp_usb_serial_device))
@@ -323,6 +327,16 @@ int main(void)
 	else
 	{
 		LOG_INF("i2c not ready");
+		return 0;
+	}
+
+	if (device_is_ready(rtc_device))
+	{
+		LOG_INF("rtc ready");
+	}
+	else
+	{
+		LOG_INF("rtc not ready");
 		return 0;
 	}
 
