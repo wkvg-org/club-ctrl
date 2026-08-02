@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2016 Intel Corporation
+ * Copyright (C) 2025 - 2026 Wolfenbütteler Kultur- und Veranstaltungsgesellschaft gemeinnützige UG (haftungsbeschränkt)
  *
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: GPL-2.0-only
  */
 
 #include <errno.h>
@@ -96,6 +96,14 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
 #define W5500_NODE DT_ALIAS(eth_w5500)
 static const struct device *w5500_device = DEVICE_DT_GET(W5500_NODE);
 
+// RTC
+#define RTC_NODE DT_ALIAS(rtc)
+static const struct device *rtc_device = DEVICE_DT_GET(RTC_NODE);
+
+// TCA
+#define TCA_NODE DT_ALIAS(tca)
+static const struct device *tca_device = DEVICE_DT_GET(TCA_NODE);
+
 int main(void)
 {
 	if (device_is_ready(esp_usb_serial_device))
@@ -107,7 +115,6 @@ int main(void)
 		LOG_INF("ESP USB Serial not ready");
 		return 0;
 	}
-	printk("hello world");
 
 	int ret;
 
@@ -163,6 +170,26 @@ int main(void)
 	else
 	{
 		LOG_INF("Ethernet not ready");
+		return 0;
+	}
+
+	if (device_is_ready(rtc_device))
+	{
+		LOG_INF("rtc ready");
+	}
+	else
+	{
+		LOG_INF("rtc not ready");
+		return 0;
+	}
+
+	if (device_is_ready(tca_device))
+	{
+		LOG_INF("tca ready");
+	}
+	else
+	{
+		LOG_INF("tca not ready");
 		return 0;
 	}
 
