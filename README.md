@@ -1,66 +1,157 @@
 # club-ctrl
 
-Firmware for Waveshare ESP32S3(-POE)-ETH-8DI-8RO being used as home automation controller for digital inputs and relay outputs.
-This project is realizing typical use cases seen in small venues, discos and clubs. 
+Firmware for the Waveshare ESP32-S3(-POE)-ETH-8DI-8RO board, used as a
+home-automation / venue controller for digital inputs, relay outputs, DMX512
+lighting and buzzer audio. Targets small venues, discos and clubs.
 
 ## Use Cases
 
-### Area related altering 
+### Area-related alerting
 
-Personnel in a defined area (e.g. bar, dance floor, entrance, ...) triggering an alarm which can be forwarded to different event receivers.
-E.g. switching on alarm lights in a security office, sending pager messages or similar.
+Personnel in a defined area (bar, dance floor, entrance, ...) trigger an alarm
+that is forwarded to event receivers — e.g. security-office alarm lights,
+pager messages, etc.
 
 ### Monitoring of dry contacts
 
-Equipment using dry contacts e.g. leakage sensors can be integrated for alerting.
+Equipment with dry contacts (e.g. leakage sensors) can be integrated for
+alerting.
 
-### Door Bell Monitoring
+### Door-bell monitoring
 
-Elevator, Entry, Exit
+Elevator, entry, exit.
 
+### DMX512 lighting
 
+Drive a moving-head fixture (currently a Thomann PicoSpot 45 in 9-channel mode)
+over RS485 from UART1. Per-song, time-keyframed light shows are dispatched
+together with buzzer playback via the `party` shell command.
+
+### Buzzer audio
+
+Passive piezo buzzer driven by the LEDC PWM peripheral through Zephyr's
+`pwm-buzzer` subsystem. Plays note-timed melodies from `sound/songs.c`.
 
 ## Architecture
 
-- Ethernet Interface
-  - DHCP client
-  - DNS client - needed?
-  - web server interface & rest api / mqtt
-  - authentication & authorization
-  - web client interface / webhooks/mqtt
-  - firmware update
-  - heartbeat via webhook/mqtt
-- SD card
-  - logging
-  - configuration
-  - credentials?
-- RTC
-  - Battery
-  - NTP
-- 
+### Hardware
+
+- **MCU**: ESP32-S3 (procpu).
+- **DMX out**: UART1 → RS485 transceiver (TX = GPIO17, RX = GPIO18). TXD is
+  inverted at the pin matrix to compensate for A/B convention on the
+  Waveshare transceiver vs. DMX XLR pin 2/3.
+- **Buzzer**: LEDC channel 0 → GPIO46 (pwm-buzzer).
+- **Ethernet**: W5500 over SPI.
+- **I²C**: PCA9538 GPIO expander (relays), PCF85063A RTC.
+- **SD**: ESP32 SDHC.
+
+### Software modules (`src/modules/`)
+
+| Module | Purpose |
+|---|---|
+| `output/dmx/` | DMX512 TX driver, 40 Hz refresh, universe buffer, `mh` shell for the moving head. |
+| `output/sound/` | Buzzer playback thread, note tables (`songs.c`), startup chime, `sound` shell. |
+| `show/` | Time-keyframed lighting-show player. Synchronises with buzzer via a unified `party` shell. |
+| `config/`, `diag/`, `input/`, `led/`, `logging/`, `net/`, `ota/`, `sd/`, `sec/`, `time/` | Scaffolding for the remaining board features (see individual dirs). |
+
+### Networking (planned)
+
+- Ethernet (W5500) with DHCP, static-IP fallback.
+- DNS client.
+- REST / MQTT server + web UI.
+- Auth (device credentials from SD).
+- Firmware update (OTA module).
+- Heartbeat via webhook / MQTT.
+
+### Storage / time
+
+- **SD card**: logs, configuration, credentials.
+- **RTC**: PCF85063A with battery backup, disciplined by NTP once network is up.
+
+## Shell commands
+
+Once flashed, connect the serial console. Commands available:
+
+```
+mh pan <deg>          # 0..540
+mh tilt <deg>         # 0..270
+mh dimmer <0-255>
+mh color <0-255>      # PicoSpot colour-wheel index
+mh gobo <0-255>
+mh strobe <0-255>     # 0-9 = open, 10-255 = strobe
+mh motor <0-255>      # movement speed / smoothing
+mh home
+mh blackout
+mh raw <ch> <val>
+mh flood
+
+sound play <song>
+sound stop
+
+party <song>          # start song + matching light show
+party stop
+```
+
+Songs currently wired: see `src/modules/output/sound/songs.c` and
+`src/modules/show/shows.c`.
 
 ## Development
 
-### building
+### Toolchain
 
-in %HOME/zephyrproject/
-`.venv\Scripts\Activate.ps1`
+Zephyr workspace under `~/zephyrproject`, Zephyr SDK, west, esptool.
 
-ensure that the base build path is as short as possible.
+```powershell
+# Windows
+%HOME%/zephyrproject/.venv/Scripts/Activate.ps1
+```
 
-`west build --board esp32s3_eth_8di_8ro/esp32s3/procpu --build-dir N:\b`
+```bash
+# Linux
+source ~/zephyrproject/.venv/bin/activate
+```
 
-### flash (rebuilding if necessary)
+### Fetch Espressif blobs (once)
 
-`west flash --esp-device COM4 --build-dir N:\b`
+WiFi and BLE stacks require binary blobs:
 
-### connect terminal
+```bash
+west blobs fetch hal_espressif
+```
 
-`west espressif monitor -p COM4`
+### Build
 
-### disconnect terminal - Windows
+Keep the build-dir path short (Windows CLI length limits):
 
-`CTRL+T + CTRL+X`
+```bash
+west build --board esp32s3_eth_8di_8ro/esp32s3/procpu \
+           --build-dir /tmp/b \
+           /path/to/club-ctrl
+```
+
+Windows equivalent:
+
+```powershell
+west build --board esp32s3_eth_8di_8ro/esp32s3/procpu --build-dir N:\b
+```
+
+### Flash
+
+```bash
+west flash --build-dir /tmp/b --esp-device /dev/ttyACM0   # Linux
+west flash --build-dir N:\b  --esp-device COM4            # Windows
+```
+
+The serial monitor must be disconnected before flashing.
+
+### Serial monitor
+
+```bash
+west espressif monitor -p /dev/ttyACM0    # Linux
+west espressif monitor -p COM4            # Windows
+```
+
+Disconnect on Windows: `CTRL+T`, then `CTRL+X`.
 
 ## License
 
@@ -68,4 +159,5 @@ SPDX-License-Identifier: GPL-2.0-only
 
 ## Copyright
 
-Copyright (C) 2025 - 2026 Wolfenbütteler Kultur- und Veranstaltungsgesellschaft gemeinnützige UG (haftungsbeschränkt)
+Copyright (C) 2025 - 2026 Wolfenbütteler Kultur- und Veranstaltungsgesellschaft
+gemeinnützige UG (haftungsbeschränkt)

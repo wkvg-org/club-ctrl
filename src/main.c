@@ -17,7 +17,14 @@ LOG_MODULE_REGISTER(main);
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/buzzer.h>
 #include <zephyr/sys/util.h>
+
+#include "modules/output/dmx/dmx.h"
+#include "modules/output/dmx/fixture.h"
+#include "modules/output/sound/sound.h"
+#include "modules/show/show.h"
+#include "modules/net/udp_server.h"
 
 #define STRIP_NODE DT_ALIAS(led_strip)
 
@@ -40,14 +47,8 @@ static struct led_rgb pixels[STRIP_NUM_PIXELS];
 
 static const struct device *const strip = DEVICE_DT_GET(STRIP_NODE);
 
-/* The devicetree node identifier for the "buzzer" alias. */
-#define BUZZER_NODE DT_ALIAS(buzzer)
-
-/*
- * A build error on this line means your board is unsupported.
- * See the sample documentation for information on how to fix this.
- */
-static const struct gpio_dt_spec buzzer = GPIO_DT_SPEC_GET(BUZZER_NODE, gpios);
+#define BUZZER_NODE DT_ALIAS(buzzer0)
+static const struct device *const buzzer_dev = DEVICE_DT_GET(BUZZER_NODE);
 
 #define USB_SERIAL_NODE DT_ALIAS(usb_serial)
 static const struct device *esp_usb_serial_device = DEVICE_DT_GET(USB_SERIAL_NODE);
@@ -74,7 +75,7 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
 	if (val > 0)
 	{
 		printk("Button pressed");
-		gpio_pin_toggle_dt(&buzzer);
+		buzzer_beep(buzzer_dev, 100);
 		for (size_t cursor = 0; cursor < ARRAY_SIZE(pixels); cursor++)
 		{
 			memset(&pixels, 0x00, sizeof(pixels));
@@ -152,16 +153,27 @@ int main(void)
 		return 0;
 	}
 
-	if (!gpio_is_ready_dt(&buzzer))
+	if (!device_is_ready(buzzer_dev))
 	{
+		LOG_ERR("buzzer not ready");
 		return 0;
 	}
 
-	ret = gpio_pin_configure_dt(&buzzer, GPIO_OUTPUT_ACTIVE);
-	if (ret < 0)
-	{
-		return 0;
+	ret = dmx_init();
+	if (ret != 0) {
+		LOG_ERR("dmx_init failed: %d", ret);
 	}
+
+	ret = sound_init();
+	if (ret != 0) {
+		LOG_ERR("sound_init failed: %d", ret);
+	} else {
+		sound_play(startup_chime, startup_chime_len);
+	}
+
+	show_init();
+
+	udp_server_init();
 
 	if (device_is_ready(w5500_device))
 	{

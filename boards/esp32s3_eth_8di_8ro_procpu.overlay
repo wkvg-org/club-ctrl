@@ -1,0 +1,87 @@
+/*
+ * Board overlay: enable UART1 as DMX512 output on the RS485 transceiver.
+ * TX=GPIO17, RX=GPIO18, hardware half-duplex DE/RE handled by transceiver.
+ *
+ * Baud is set to a placeholder here (250000 is DMX). The actual runtime
+ * config (250000 8N2) is applied via uart_configure() at boot.
+ */
+
+#include <dt-bindings/pinctrl/esp32s3-pinctrl.h>
+#include <zephyr/dt-bindings/pinctrl/esp-pinctrl-common.h>
+#include <zephyr/dt-bindings/pinctrl/esp32s3-gpio-sigmap.h>
+#include <zephyr/dt-bindings/pwm/pwm.h>
+
+&pinctrl {
+	uart1_dmx: uart1_dmx {
+		group1 {
+			pinmux = <UART1_TX_GPIO17>;
+			output-high;
+		};
+		group2 {
+			pinmux = <UART1_RX_GPIO18>;
+			bias-pull-up;
+		};
+	};
+
+	ledc0_buzzer: ledc0_buzzer {
+		group1 {
+			pinmux = <LEDC_CH0_GPIO46>;
+			output-enable;
+		};
+	};
+};
+
+/ {
+	aliases {
+		dmx-uart = &uart1;
+	};
+
+	/*
+	 * Retire the base board's gpio-leds buzzer node so we can reclaim
+	 * GPIO46 for LEDC PWM below without a pinctrl fight.
+	 */
+	/delete-node/ buzzer;
+};
+
+&uart1 {
+	status = "okay";
+	compatible = "espressif,esp32-uart";
+	pinctrl-0 = <&uart1_dmx>;
+	pinctrl-names = "default";
+	current-speed = <250000>;
+};
+
+/*
+ * Retarget the on-board buzzer (GPIO46 = gpio1 pin 14) from the base board's
+ * gpio-leds node to Zephyr's pwm-buzzer subsystem, driven by LEDC channel 0.
+ */
+&ledc0 {
+	status = "okay";
+	pinctrl-0 = <&ledc0_buzzer>;
+	pinctrl-names = "default";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	buzzer_ch: channel0@0 {
+		reg = <0x0>;
+		timer = <0>;
+	};
+};
+
+/ {
+	buzzer_pwm: buzzer_pwm {
+		compatible = "pwm-buzzer";
+		pwms = <&ledc0 0 PWM_HZ(2700) PWM_POLARITY_NORMAL>;
+		status = "okay";
+	};
+
+	aliases {
+		buzzer0 = &buzzer_pwm;
+	};
+};
+
+/ {
+	aliases {
+		/delete-property/ buzzer;
+	};
+};
