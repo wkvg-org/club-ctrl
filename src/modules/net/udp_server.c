@@ -22,6 +22,7 @@
 #include <zephyr/net/socket.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/printk.h>
 #include <stdlib.h>
 
 LOG_MODULE_REGISTER(udp_srv, LOG_LEVEL_INF);
@@ -70,7 +71,8 @@ static void udp_server_thread(void *arg1, void *arg2, void *arg3)
 		return;
 	}
 
-	LOG_INF("UDP server listening on port %u", UDP_PORT);
+	printk("[DMX] UDP server listening on port %u\n", UDP_PORT);
+	LOG_WRN("club-ctrl: UDP server running on port %u", UDP_PORT);
 
 	char buf[BUF_SIZE];
 
@@ -92,21 +94,24 @@ static void udp_server_thread(void *arg1, void *arg2, void *arg3)
 			if (buf[1] == ':' && parse_byte(buf + 2, &val) == 0) {
 				g_mh_state.color = val;
 				mh_set(&g_mh_state);
-				LOG_INF("color = %u", val);
+				printk("[DMX] color = %u\n", val);
+				LOG_WRN("club-ctrl: UDP DMX color = %u", val);
 			}
 			break;
 		case 'D':
 			if (buf[1] == ':' && parse_byte(buf + 2, &val) == 0) {
 				g_mh_state.dimmer = val;
 				mh_set(&g_mh_state);
-				LOG_INF("dimmer = %u", val);
+				printk("[DMX] dimmer = %u\n", val);
+				LOG_WRN("club-ctrl: UDP DMX dimmer = %u", val);
 			}
 			break;
 		case 'S':
 			if (buf[1] == ':' && parse_byte(buf + 2, &val) == 0) {
 				g_mh_state.strobe = val;
 				mh_set(&g_mh_state);
-				LOG_INF("strobe = %u", val);
+				printk("[DMX] strobe = %u\n", val);
+				LOG_WRN("club-ctrl: UDP DMX strobe = %u", val);
 			}
 			break;
 		case 'P':
@@ -117,7 +122,8 @@ static void udp_server_thread(void *arg1, void *arg2, void *arg3)
 				if (*end == '\n' && pv >= 0 && pv <= 540) {
 					g_mh_state.pan_deg = (uint16_t)pv;
 					mh_set(&g_mh_state);
-					LOG_INF("pan = %ld", pv);
+					printk("[DMX] pan = %ld\n", pv);
+					LOG_WRN("club-ctrl: UDP DMX pan = %ld", pv);
 				}
 			}
 			break;
@@ -129,7 +135,8 @@ static void udp_server_thread(void *arg1, void *arg2, void *arg3)
 				if (*end == '\n' && tv >= 0 && tv <= 200) {
 					g_mh_state.tilt_deg = (uint8_t)tv;
 					mh_set(&g_mh_state);
-					LOG_INF("tilt = %ld", tv);
+					printk("[DMX] tilt = %ld\n", tv);
+					LOG_WRN("club-ctrl: UDP DMX tilt = %ld", tv);
 				}
 			}
 			break;
@@ -140,12 +147,14 @@ static void udp_server_thread(void *arg1, void *arg2, void *arg3)
 				.motor_speed = 0, .color = MH_COL_WHITE,
 				.dimmer = 255,
 			};
-			LOG_INF("home");
+			printk("[DMX] home\n");
+			LOG_WRN("club-ctrl: UDP DMX home");
 			break;
 		case 'B':
 			mh_blackout();
 			g_mh_state.dimmer = 0;
-			LOG_INF("blackout");
+			printk("[DMX] blackout\n");
+			LOG_WRN("club-ctrl: UDP DMX blackout");
 			break;
 		default:
 			break;
