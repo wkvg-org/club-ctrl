@@ -111,9 +111,10 @@ Planned files:
   "mqtt_server_ip": "192.168.2.128",
   "mqtt_server_port": 1883,
   "dmx_start_addr": 1,
-  "ntp_server_1": "192.53.103.108",
-  "ntp_server_2": "192.53.103.104",
-  "ntp_server_3": "192.53.103.103"
+  "ntp_server_domain_1": "192.53.103.108",
+  "ntp_server_domain_2": "192.53.103.104",
+  "ntp_server_domain_3": "192.53.103.103",
+  "ntp_server_port": 123
 }
 ```
 

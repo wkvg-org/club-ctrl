@@ -47,22 +47,24 @@ static const char *CREDS_PATH   = "/SD:/creds.json";
 
 struct ctrl_config {
 	char     device_name[64];
-	char     mqtt_broker_ip[16];
-	uint16_t mqtt_broker_port;
+	char     mqtt_server_ip[16];
+	uint16_t mqtt_server_port;
 	uint16_t dmx_start_addr;
-	char     ntp_server_1[128];
-	char     ntp_server_2[128];
-	char     ntp_server_3[128];
+	char     ntp_server_domain_1[128];
+	char     ntp_server_domain_2[128];
+	char     ntp_server_domain_3[128];
+	uint16_t ntp_server_port;
 };
 
 static const struct json_obj_descr cfg_descr[] = {
-	JSON_OBJ_DESCR_PRIM(struct ctrl_config, device_name,     JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct ctrl_config, mqtt_broker_ip,  JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct ctrl_config, mqtt_broker_port, JSON_TOK_NUMBER),
-	JSON_OBJ_DESCR_PRIM(struct ctrl_config, dmx_start_addr,  JSON_TOK_NUMBER),
-	JSON_OBJ_DESCR_PRIM(struct ctrl_config, ntp_server_1,    JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct ctrl_config, ntp_server_2,    JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct ctrl_config, ntp_server_3,    JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct ctrl_config, device_name,          JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct ctrl_config, mqtt_server_ip,       JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct ctrl_config, mqtt_server_port,     JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct ctrl_config, dmx_start_addr,       JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct ctrl_config, ntp_server_domain_1,  JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct ctrl_config, ntp_server_domain_2,  JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct ctrl_config, ntp_server_domain_3,  JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct ctrl_config, ntp_server_port,      JSON_TOK_NUMBER),
 };
 
 /* ── JSON: creds.json ───────────────────────────────────────────────── */
@@ -133,16 +135,16 @@ static void load_club_ctrl_json(void)
 	}
 
 	copy_str(g_device_name, sizeof(g_device_name), cfg.device_name);
-	copy_str(g_mqtt_broker_ip, sizeof(g_mqtt_broker_ip), cfg.mqtt_broker_ip);
-	if (cfg.mqtt_broker_port != 0) {
-		g_mqtt_port = cfg.mqtt_broker_port;
+	copy_str(g_mqtt_broker_ip, sizeof(g_mqtt_broker_ip), cfg.mqtt_server_ip);
+	if (cfg.mqtt_server_port != 0) {
+		g_mqtt_port = cfg.mqtt_server_port;
 	}
 	if (cfg.dmx_start_addr >= 1 && cfg.dmx_start_addr <= 504) {
 		g_dmx_addr = cfg.dmx_start_addr;
 	}
-	copy_str(g_ntp[0], sizeof(g_ntp[0]), cfg.ntp_server_1);
-	copy_str(g_ntp[1], sizeof(g_ntp[1]), cfg.ntp_server_2);
-	copy_str(g_ntp[2], sizeof(g_ntp[2]), cfg.ntp_server_3);
+	copy_str(g_ntp[0], sizeof(g_ntp[0]), cfg.ntp_server_domain_1);
+	copy_str(g_ntp[1], sizeof(g_ntp[1]), cfg.ntp_server_domain_2);
+	copy_str(g_ntp[2], sizeof(g_ntp[2]), cfg.ntp_server_domain_3);
 
 	LOG_INF("config loaded from %s", CONFIG_PATH);
 }
