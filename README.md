@@ -109,6 +109,7 @@ Planned files:
 {
   "device_name": "club-ctrl",
   "mqtt_server_ip": "192.168.2.128",
+  "mqtt_server_domain": "mqtt.moai.sk",
   "mqtt_server_port": 1883,
   "dmx_start_addr": 1,
   "ntp_server_domain_1": "192.53.103.108",

@@ -34,6 +34,7 @@ static const char *DEFAULT_NTP[] = {
 
 static char     g_device_name[64] = DEFAULT_DEVICE_NAME;
 static char     g_mqtt_broker_ip[16] = DEFAULT_MQTT_BROKER_IP;
+static char     g_mqtt_broker_domain[128];
 static uint16_t g_mqtt_port = DEFAULT_MQTT_PORT;
 static uint16_t g_dmx_addr = DEFAULT_DMX_START_ADDR;
 static char     g_ntp[3][128];
@@ -48,6 +49,7 @@ static const char *CREDS_PATH   = "/SD:/creds.json";
 struct ctrl_config {
 	char     device_name[64];
 	char     mqtt_server_ip[16];
+	char     mqtt_server_domain[128];
 	uint16_t mqtt_server_port;
 	uint16_t dmx_start_addr;
 	char     ntp_server_domain_1[128];
@@ -59,6 +61,7 @@ struct ctrl_config {
 static const struct json_obj_descr cfg_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct ctrl_config, device_name,          JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct ctrl_config, mqtt_server_ip,       JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct ctrl_config, mqtt_server_domain,   JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct ctrl_config, mqtt_server_port,     JSON_TOK_NUMBER),
 	JSON_OBJ_DESCR_PRIM(struct ctrl_config, dmx_start_addr,       JSON_TOK_NUMBER),
 	JSON_OBJ_DESCR_PRIM(struct ctrl_config, ntp_server_domain_1,  JSON_TOK_STRING),
@@ -136,6 +139,7 @@ static void load_club_ctrl_json(void)
 
 	copy_str(g_device_name, sizeof(g_device_name), cfg.device_name);
 	copy_str(g_mqtt_broker_ip, sizeof(g_mqtt_broker_ip), cfg.mqtt_server_ip);
+	copy_str(g_mqtt_broker_domain, sizeof(g_mqtt_broker_domain), cfg.mqtt_server_domain);
 	if (cfg.mqtt_server_port != 0) {
 		g_mqtt_port = cfg.mqtt_server_port;
 	}
@@ -201,8 +205,9 @@ void config_init(void)
 }
 
 const char *config_device_name(void)    { return g_device_name; }
-const char *config_mqtt_broker_ip(void) { return g_mqtt_broker_ip; }
-uint16_t    config_mqtt_broker_port(void){ return g_mqtt_port; }
+const char *config_mqtt_broker_ip(void)     { return g_mqtt_broker_ip; }
+const char *config_mqtt_broker_domain(void) { return g_mqtt_broker_domain; }
+uint16_t    config_mqtt_broker_port(void)    { return g_mqtt_port; }
 const char *config_mqtt_username(void)  { return g_mqtt_user; }
 const char *config_mqtt_password(void)  { return g_mqtt_pass; }
 uint16_t    config_dmx_start_addr(void) { return g_dmx_addr; }

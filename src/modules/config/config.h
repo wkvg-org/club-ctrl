@@ -15,6 +15,7 @@ void config_init(void);
 
 const char *config_device_name(void);
 const char *config_mqtt_broker_ip(void);
+const char *config_mqtt_broker_domain(void);
 uint16_t    config_mqtt_broker_port(void);
 const char *config_mqtt_username(void);
 const char *config_mqtt_password(void);
