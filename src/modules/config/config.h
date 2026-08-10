@@ -1,12 +1,24 @@
-#include <zephyr/data/json.h>
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * SD card configuration loader. Reads club-ctrl.json + creds.json
+ * from the SD card at boot. Falls back to built-in defaults when
+ * files are absent or parsing fails.
+ */
 
-struct foo
-{
-    int bar;
-    const char *baz;
-};
+#ifndef CONFIG_H_
+#define CONFIG_H_
 
-static const struct json_obj_descr foo_descr[] = {
-    JSON_OBJ_DESCR_PRIM(struct foo, bar, JSON_TOK_NUMBER),
-    JSON_OBJ_DESCR_PRIM(struct foo, baz, JSON_TOK_STRING),
-};
+#include <stdint.h>
+
+void config_init(void);
+
+const char *config_device_name(void);
+const char *config_mqtt_broker_ip(void);
+uint16_t    config_mqtt_broker_port(void);
+const char *config_mqtt_username(void);
+const char *config_mqtt_password(void);
+uint16_t    config_dmx_start_addr(void);
+const char *config_ntp_server(uint8_t idx);
+
+#endif /* CONFIG_H_ */

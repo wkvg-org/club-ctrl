@@ -4,6 +4,7 @@
 
 #include "mqtt_subscriber.h"
 #include "../output/dmx/fixture.h"
+#include "../config/config.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/net/socket.h>
@@ -19,9 +20,6 @@
 
 LOG_MODULE_REGISTER(mqtt_sub, LOG_LEVEL_INF);
 
-#define BROKER_IP   "192.168.2.128"
-#define BROKER_PORT 1883
-#define CLIENT_ID   "club-ctrl"
 #define KEEPALIVE   60
 #define STACK_SIZE  4096
 #define RX_BUF_SIZE 512
@@ -47,7 +45,7 @@ static void mqtt_evt_handler(struct mqtt_client *c, const struct mqtt_evt *evt)
 			break;
 		}
 		connected = true;
-		LOG_INF("MQTT connected to %s:%u", BROKER_IP, BROKER_PORT);
+		LOG_INF("MQTT connected to %s:%u", config_mqtt_broker_ip(), config_mqtt_broker_port());
 
 		/* Subscribe to all DMX topics */
 		struct mqtt_subscription_list sub_list = {
@@ -165,13 +163,13 @@ static int try_connect(void)
 	mqtt_client_init(&client);
 
 	broker4->sin_family = AF_INET;
-	broker4->sin_port = htons(BROKER_PORT);
-	inet_pton(AF_INET, BROKER_IP, &broker4->sin_addr);
+	broker4->sin_port = htons(config_mqtt_broker_port());
+	inet_pton(AF_INET, config_mqtt_broker_ip(), &broker4->sin_addr);
 
 	client.broker = &broker_addr;
 	client.evt_cb = mqtt_evt_handler;
-	client.client_id.utf8 = (uint8_t *)CLIENT_ID;
-	client.client_id.size = strlen(CLIENT_ID);
+	client.client_id.utf8 = (uint8_t *)config_device_name();
+	client.client_id.size = strlen(config_device_name());
 	client.protocol_version = MQTT_VERSION_3_1_1;
 	client.keepalive = KEEPALIVE;
 	client.rx_buf = rx_buf;
@@ -210,7 +208,7 @@ static void mqtt_thread_fn(void *arg1, void *arg2, void *arg3)
 {
 	ARG_UNUSED(arg1); ARG_UNUSED(arg2); ARG_UNUSED(arg3);
 
-	printk("[MQTT] subscriber starting (broker %s:%u)\n", BROKER_IP, BROKER_PORT);
+	printk("[MQTT] subscriber starting (broker %s:%u)\n", config_mqtt_broker_ip(), config_mqtt_broker_port());
 
 	struct pollfd fds[1];
 

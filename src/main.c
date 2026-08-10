@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(main);
 #include <zephyr/drivers/buzzer.h>
 #include <zephyr/sys/util.h>
 
+#include "modules/config/config.h"
 #include "modules/output/dmx/dmx.h"
 #include "modules/output/dmx/fixture.h"
 #include "modules/output/sound/sound.h"
@@ -168,11 +169,15 @@ int main(void)
 		return 0;
 	}
 
+	/* ── SD card configuration ─────────────────────────────────── */
+	config_init();
+
 	/* ── DMX512 transmitter (UART1, RS485, 40 Hz refresh) ────────── */
 	ret = dmx_init();
 	if (ret != 0) {
 		LOG_ERR("dmx_init failed: %d", ret);
 	}
+	mh_set_addr(config_dmx_start_addr());
 
 	/* ── Buzzer song player (cooperative thread, prio 9) ─────────── */
 	ret = sound_init();
