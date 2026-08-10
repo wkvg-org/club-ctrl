@@ -207,6 +207,19 @@ static int cmd_flood(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+static int cmd_addr(const struct shell *sh, size_t argc, char **argv)
+{
+	unsigned long v;
+
+	if (parse_ulong(argv[1], 504, &v) < 0) {
+		shell_error(sh, "addr must be 1..504");
+		return -EINVAL;
+	}
+	mh_set_addr((uint16_t)v);
+	shell_print(sh, "dmx start addr = %lu", v);
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(mh_subcmds,
 	SHELL_CMD_ARG(pan,      NULL, "<0..540>",              cmd_pan,      2, 0),
 	SHELL_CMD_ARG(tilt,     NULL, "<0..200>",              cmd_tilt,     2, 0),
@@ -215,6 +228,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(mh_subcmds,
 	SHELL_CMD_ARG(dimmer,   NULL, "<0..255>",              cmd_dimmer,   2, 0),
 	SHELL_CMD_ARG(gobo,     NULL, "<0..255>",              cmd_gobo,     2, 0),
 	SHELL_CMD_ARG(strobe,   NULL, "<0..255>",              cmd_strobe,   2, 0),
+	SHELL_CMD_ARG(addr,     NULL, "<1..504>",              cmd_addr,     2, 0),
 	SHELL_CMD(    home,     NULL, "recenter, white, full", cmd_home),
 	SHELL_CMD(    blackout, NULL, "dimmer=0",              cmd_blackout),
 	SHELL_CMD(    show,     NULL, "print current state",   cmd_show),

@@ -24,6 +24,7 @@ LOG_MODULE_REGISTER(main);
 #include "modules/output/dmx/fixture.h"
 #include "modules/output/sound/sound.h"
 #include "modules/show/show.h"
+#include "modules/net/mqtt_subscriber.h"
 #include "modules/net/udp_server.h"
 
 #define STRIP_NODE DT_ALIAS(led_strip)
@@ -62,6 +63,10 @@ static const struct device *esp_usb_serial_device = DEVICE_DT_GET(USB_SERIAL_NOD
 #endif
 static const struct gpio_dt_spec button = GPIO_DT_SPEC_GET_OR(SW0_NODE, gpios, {0});
 static struct gpio_callback button_cb_data;
+/*
+ * Boot-button ISR: cycles through R/G/B colours across the LED strip
+ * pixels one pixel at a time, with a short buzzer beep on each press.
+ */
 void button_pressed(const struct device *dev, struct gpio_callback *cb,
 					uint32_t pins)
 {
@@ -107,6 +112,7 @@ static const struct device *tca_device = DEVICE_DT_GET(TCA_NODE);
 
 int main(void)
 {
+	/* ── USB-serial console (ESP32 built-in) ────────────────────── */
 	if (device_is_ready(esp_usb_serial_device))
 	{
 		LOG_INF("ESP USB Serial ready");
@@ -119,6 +125,7 @@ int main(void)
 
 	int ret;
 
+	/* ── Boot button (GPIO interrupt, drives LED strip animation) ─ */
 	if (!gpio_is_ready_dt(&button))
 	{
 		printk("Error: button device %s is not ready\n", button.port->name);
@@ -143,6 +150,7 @@ int main(void)
 	gpio_add_callback(button.port, &button_cb_data);
 	printk("Set up button at %s pin %d\n", button.port->name, button.pin);
 
+	/* ── WS2812 RGB LED strip (SPI-based) ────────────────────────── */
 	if (device_is_ready(strip))
 	{
 		LOG_INF("Found LED strip device %s", strip->name);
@@ -153,17 +161,20 @@ int main(void)
 		return 0;
 	}
 
+	/* ── Piezo buzzer (LEDC PWM channel) ─────────────────────────── */
 	if (!device_is_ready(buzzer_dev))
 	{
 		LOG_ERR("buzzer not ready");
 		return 0;
 	}
 
+	/* ── DMX512 transmitter (UART1, RS485, 40 Hz refresh) ────────── */
 	ret = dmx_init();
 	if (ret != 0) {
 		LOG_ERR("dmx_init failed: %d", ret);
 	}
 
+	/* ── Buzzer song player (cooperative thread, prio 9) ─────────── */
 	ret = sound_init();
 	if (ret != 0) {
 		LOG_ERR("sound_init failed: %d", ret);
@@ -171,10 +182,14 @@ int main(void)
 		sound_play(startup_chime, startup_chime_len);
 	}
 
+	/* ── Light-show runner (cooperative thread, prio 8) ──────────── */
 	show_init();
 
+	/* ── Network servers (MQTT subscriber + UDP command server) ──── */
+	mqtt_subscriber_init();
 	udp_server_init();
 
+	/* ── Ethernet (W5500 over SPI) ────────────────────────────────── */
 	if (device_is_ready(w5500_device))
 	{
 		LOG_INF("Ethernet ready");
@@ -185,6 +200,7 @@ int main(void)
 		return 0;
 	}
 
+	/* ── PCF85063A RTC (I²C, battery-backed) ─────────────────────── */
 	if (device_is_ready(rtc_device))
 	{
 		LOG_INF("rtc ready");
@@ -195,6 +211,7 @@ int main(void)
 		return 0;
 	}
 
+	/* ── PCA9538 GPIO expander (I²C, relay outputs) ──────────────── */
 	if (device_is_ready(tca_device))
 	{
 		LOG_INF("tca ready");

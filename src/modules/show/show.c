@@ -19,6 +19,10 @@ static volatile bool  stop_flag;
 static const struct show_frame *g_frames;
 static size_t                    g_frames_len;
 
+/**
+ * Linear interpolation between two unsigned values.
+ * Returns a + (b - a) * num / den, clamped to the source type range.
+ */
 static uint8_t lerp_u8(uint8_t a, uint8_t b, uint32_t num, uint32_t den)
 {
 	if (den == 0) {
@@ -37,6 +41,11 @@ static uint16_t lerp_u16(uint16_t a, uint16_t b, uint32_t num, uint32_t den)
 	return (uint16_t)((int32_t)a + (diff * (int32_t)num) / (int32_t)den);
 }
 
+/**
+ * Interpolate between two keyframes at time t_ms.
+ * Continuous fields (pan, tilt, dimmer) are linearly interpolated;
+ * discrete fields (motor, colour, gobo, strobe) snap from the earlier frame.
+ */
 static void interpolate(const struct show_frame *a, const struct show_frame *b,
 			uint32_t t_ms, struct mh_state *out)
 {
@@ -53,6 +62,11 @@ static void interpolate(const struct show_frame *a, const struct show_frame *b,
 	out->strobe      = a->state.strobe;
 }
 
+/**
+ * Light-show playback thread. Absolute-deadline scheduling anchored to
+ * show_play() start time keeps the lights in sync with the buzzer
+ * (which uses the same pattern in sound.c). Runs at ~25 Hz tick rate.
+ */
 static void show_thread_fn(void *a, void *b, void *c)
 {
 	ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);

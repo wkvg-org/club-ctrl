@@ -3,7 +3,7 @@
  *
  * PicoSpot 45 moving-head, 9-channel DMX mode (16-bit).
  *
- * DMX map (relative to MH_START_ADDR):
+ * DMX map (relative to start address, default 1):
  *   1  Pan coarse   0..255 → 0°..540°
  *   2  Tilt coarse  0..255 → 0°..200°
  *   3  Pan fine     16-bit LSB (unused, held 0)
@@ -19,6 +19,9 @@
 #define FIXTURE_H_
 
 #include <stdint.h>
+
+#define MH_DEFAULT_START_ADDR 1
+#define MH_MAX_START_ADDR     (512 - 9)  /* must leave room for 9 channels */
 
 enum mh_color {
 	MH_COL_WHITE  = 5,
@@ -44,6 +47,7 @@ struct mh_state {
 void mh_set(const struct mh_state *s);
 void mh_home(void);
 void mh_blackout(void);
+void mh_set_addr(uint16_t addr);
 
 /* Shared state for the shell and the network server. */
 extern struct mh_state g_mh_state;

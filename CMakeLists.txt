@@ -18,6 +18,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(blinky)
 
 target_sources(app PRIVATE src/main.c)
+target_sources(app PRIVATE src/modules/net/mqtt_subscriber.c)
 target_sources(app PRIVATE src/modules/net/udp_server.c)
 
 add_subdirectory(src/modules/output/dmx)

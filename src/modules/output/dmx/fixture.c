@@ -19,7 +19,7 @@ struct mh_state g_mh_state = {
 	.strobe      = 0,
 };
 
-#define MH_START_ADDR 1
+static uint16_t g_start_addr = MH_DEFAULT_START_ADDR;
 
 #define PAN_MAX_DEG   540u
 #define TILT_MAX_DEG  200u
@@ -37,6 +37,12 @@ enum {
 	MH_CH_COUNT
 };
 
+/**
+ * Convert the logical moving-head state to a 9-channel DMX buffer and
+ * write it to the universe at the configured start address.
+ * Pan (0–540°) and tilt (0–200°) are mapped linearly to 0–255 range.
+ * 16-bit fine channels (ch3, ch4) are held at zero.
+ */
 void mh_set(const struct mh_state *s)
 {
 	if (s == NULL) {
@@ -53,7 +59,7 @@ void mh_set(const struct mh_state *s)
 	buf[CH_DIMMER]      = s->dimmer;
 	buf[CH_SHUTTER]     = s->strobe;
 
-	dmx_set_slots(MH_START_ADDR, buf, sizeof(buf));
+	dmx_set_slots(g_start_addr, buf, sizeof(buf));
 }
 
 void mh_home(void)
@@ -74,4 +80,12 @@ void mh_blackout(void)
 {
 	struct mh_state s = {0};
 	mh_set(&s);
+}
+
+void mh_set_addr(uint16_t addr)
+{
+	if (addr < 1 || addr > MH_MAX_START_ADDR) {
+		return;
+	}
+	g_start_addr = addr;
 }

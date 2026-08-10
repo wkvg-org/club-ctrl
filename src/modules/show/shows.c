@@ -186,6 +186,10 @@ const struct show_frame show_song[] = {
 };
 const size_t show_song_len = ARRAY_SIZE(show_song);
 
+/**
+ * Each song-buzzer + light-show pair is keyed by name so the "party"
+ * shell command can start both with a single reference point (t=0).
+ */
 struct song_pair {
 	const char              *name;
 	const struct note       *song;

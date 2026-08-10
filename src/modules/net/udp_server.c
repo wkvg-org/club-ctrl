@@ -90,6 +90,18 @@ static void udp_server_thread(void *arg1, void *arg2, void *arg3)
 		uint8_t val;
 
 		switch (buf[0]) {
+		case 'A':
+			if (buf[1] == ':' && n > 2) {
+				char *end;
+				long av = strtol(buf + 2, &end, 10);
+
+				if (*end == '\n' && av >= 1 && av <= 504) {
+					mh_set_addr((uint16_t)av);
+					printk("[DMX] addr = %ld\n", av);
+					LOG_WRN("club-ctrl: UDP DMX addr = %ld", av);
+				}
+			}
+			break;
 		case 'C':
 			if (buf[1] == ':' && parse_byte(buf + 2, &val) == 0) {
 				g_mh_state.color = val;
