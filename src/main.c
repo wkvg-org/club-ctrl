@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2025 - 2026 Wolfenbütteler Kultur- und Veranstaltungsgesellschaft gemeinnützige UG (haftungsbeschränkt)
  *
- * SPDX-License-Identifier: GPL-2.0-only
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <errno.h>
