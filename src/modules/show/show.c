@@ -98,13 +98,13 @@ static void show_thread_fn(void *a, void *b, void *c)
 			} else {
 				s = frames[i].state;
 			}
-			mh_set(&s);
+			mh_set(0, &s);
 
 			deadline += SHOW_TICK_MS;
 			k_sleep(K_TIMEOUT_ABS_MS(deadline));
 		}
 
-		mh_blackout();
+		mh_blackout(0);
 		stop_flag = false;
 	}
 }

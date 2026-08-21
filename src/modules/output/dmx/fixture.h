@@ -22,6 +22,7 @@
 
 #define MH_DEFAULT_START_ADDR 1
 #define MH_MAX_START_ADDR     (512 - 9)  /* must leave room for 9 channels */
+#define MH_MAX_HEADS          2          /* two PicoSpot 45 moving heads */
 
 enum mh_color {
 	MH_COL_WHITE  = 5,
@@ -44,12 +45,12 @@ struct mh_state {
 	uint8_t  strobe;       /* 0=open, 10..255 = 1..25 Hz */
 };
 
-void mh_set(const struct mh_state *s);
-void mh_home(void);
-void mh_blackout(void);
-void mh_set_addr(uint16_t addr);
+void mh_set(uint8_t head, const struct mh_state *s);
+void mh_home(uint8_t head);
+void mh_blackout(uint8_t head);
+void mh_set_addr(uint8_t head, uint16_t addr);
 
 /* Shared state for the shell and the network server. */
-extern struct mh_state g_mh_state;
+extern struct mh_state g_mh_state[MH_MAX_HEADS];
 
 #endif /* FIXTURE_H_ */

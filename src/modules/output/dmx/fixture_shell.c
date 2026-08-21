@@ -5,7 +5,8 @@
  */
 
 #include "fixture.h"
-#include "dmx.h"
+#include <dmx_z.h>
+#include "../../zbus/ctrl_zbus.h"
 
 #include <zephyr/shell/shell.h>
 #include <zephyr/kernel.h>
@@ -51,8 +52,8 @@ static int cmd_pan(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "pan must be 0..540");
 		return -EINVAL;
 	}
-	g_mh_state.pan_deg = (uint16_t)v;
-	mh_set(&g_mh_state);
+	struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_PAN, .val = (uint16_t)v };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	shell_print(sh, "pan = %lu deg", v);
 	return 0;
 }
@@ -65,8 +66,8 @@ static int cmd_tilt(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "tilt must be 0..200");
 		return -EINVAL;
 	}
-	g_mh_state.tilt_deg = (uint8_t)v;
-	mh_set(&g_mh_state);
+	struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_TILT, .val = (uint16_t)v };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	shell_print(sh, "tilt = %lu deg", v);
 	return 0;
 }
@@ -79,8 +80,8 @@ static int cmd_motor(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "motor must be 0..255");
 		return -EINVAL;
 	}
-	g_mh_state.motor_speed = (uint8_t)v;
-	mh_set(&g_mh_state);
+	struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_MOTOR, .val = (uint16_t)v };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	shell_print(sh, "motor = %lu (%s)", v, v < 128 ? "fast" : "slow");
 	return 0;
 }
@@ -89,8 +90,9 @@ static int cmd_color(const struct shell *sh, size_t argc, char **argv)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(color_table); i++) {
 		if (strcmp(argv[1], color_table[i].name) == 0) {
-			g_mh_state.color = color_table[i].value;
-			mh_set(&g_mh_state);
+			struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_COLOR,
+						    .val = color_table[i].value };
+			zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 			shell_print(sh, "color = %s (%u)",
 				    color_table[i].name, color_table[i].value);
 			return 0;
@@ -102,8 +104,8 @@ static int cmd_color(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "unknown color; use name or 0..255");
 		return -EINVAL;
 	}
-	g_mh_state.color = (uint8_t)v;
-	mh_set(&g_mh_state);
+	struct dmx_ctrl_cmd cmd2 = { .type = DMX_CTRL_COLOR, .val = (uint16_t)v };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd2, K_NO_WAIT);
 
 	const char *kind =
 		(v <= 87)  ? "fixed"   :
@@ -121,8 +123,8 @@ static int cmd_dimmer(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "dimmer must be 0..255");
 		return -EINVAL;
 	}
-	g_mh_state.dimmer = (uint8_t)v;
-	mh_set(&g_mh_state);
+	struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_DIMMER, .val = (uint16_t)v };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	shell_print(sh, "dimmer = %lu (%lu%%)", v, (v * 100) / 255);
 	return 0;
 }
@@ -135,8 +137,8 @@ static int cmd_gobo(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "gobo must be 0..255");
 		return -EINVAL;
 	}
-	g_mh_state.gobo = (uint8_t)v;
-	mh_set(&g_mh_state);
+	struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_GOBO, .val = (uint16_t)v };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	shell_print(sh, "gobo = %lu", v);
 	return 0;
 }
@@ -149,8 +151,8 @@ static int cmd_strobe(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "strobe must be 0..255 (0..9 open, 10..255 = 1..25 Hz)");
 		return -EINVAL;
 	}
-	g_mh_state.strobe = (uint8_t)v;
-	mh_set(&g_mh_state);
+	struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_STROBE, .val = (uint16_t)v };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	shell_print(sh, "strobe = %lu", v);
 	return 0;
 }
@@ -158,11 +160,8 @@ static int cmd_strobe(const struct shell *sh, size_t argc, char **argv)
 static int cmd_home(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(argc); ARG_UNUSED(argv);
-	mh_home();
-	g_mh_state = (struct mh_state){
-		.pan_deg = 270, .tilt_deg = 100,
-		.motor_speed = 0, .color = MH_COL_WHITE, .dimmer = 255,
-	};
+	struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_HOME };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	shell_print(sh, "home");
 	return 0;
 }
@@ -170,8 +169,8 @@ static int cmd_home(const struct shell *sh, size_t argc, char **argv)
 static int cmd_blackout(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(argc); ARG_UNUSED(argv);
-	mh_blackout();
-	g_mh_state.dimmer = 0;
+	struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_BLACKOUT };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	shell_print(sh, "blackout");
 	return 0;
 }
@@ -179,21 +178,13 @@ static int cmd_blackout(const struct shell *sh, size_t argc, char **argv)
 static int cmd_show(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(argc); ARG_UNUSED(argv);
-	shell_print(sh,
-		    "pan=%u tilt=%u motor=%u color=%u gobo=%u dimmer=%u strobe=%u",
-		    g_mh_state.pan_deg, g_mh_state.tilt_deg,
-		    g_mh_state.motor_speed, g_mh_state.color, g_mh_state.gobo,
-		    g_mh_state.dimmer, g_mh_state.strobe);
-	return 0;
-}
-
-static int cmd_raw(const struct shell *sh, size_t argc, char **argv)
-{
-	if (argc < 3) {
-		shell_error(sh, "usage: mh raw <ch> <val>");
-		return -EINVAL;
+	for (int h = 0; h < MH_MAX_HEADS; h++) {
+		shell_print(sh,
+			    "head %d: pan=%u tilt=%u motor=%u color=%u gobo=%u dimmer=%u strobe=%u",
+			    h, g_mh_state[h].pan_deg, g_mh_state[h].tilt_deg,
+			    g_mh_state[h].motor_speed, g_mh_state[h].color, g_mh_state[h].gobo,
+			    g_mh_state[h].dimmer, g_mh_state[h].strobe);
 	}
-	dmx_set_slot((uint16_t)atoi(argv[1]), (uint8_t)atoi(argv[2]));
 	return 0;
 }
 
@@ -201,7 +192,8 @@ static int cmd_flood(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(argc); ARG_UNUSED(argv);
 	for (uint16_t ch = 1; ch <= 16; ch++) {
-		dmx_set_slot(ch, 255);
+		struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_RAW, .ch = ch, .val = 255 };
+		zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	}
 	shell_print(sh, "slots 1..16 = 255");
 	return 0;
@@ -215,7 +207,8 @@ static int cmd_addr(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "addr must be 1..504");
 		return -EINVAL;
 	}
-	mh_set_addr((uint16_t)v);
+	struct dmx_ctrl_cmd cmd = { .type = DMX_CTRL_ADDR, .val = (uint16_t)v };
+	zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 	shell_print(sh, "dmx start addr = %lu", v);
 	return 0;
 }
@@ -232,7 +225,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(mh_subcmds,
 	SHELL_CMD(    home,     NULL, "recenter, white, full", cmd_home),
 	SHELL_CMD(    blackout, NULL, "dimmer=0",              cmd_blackout),
 	SHELL_CMD(    show,     NULL, "print current state",   cmd_show),
-	SHELL_CMD_ARG(raw,      NULL, "<ch> <val>",            cmd_raw,      3, 0),
 	SHELL_CMD(    flood,    NULL, "set slots 1..16 = 255", cmd_flood),
 	SHELL_SUBCMD_SET_END
 );

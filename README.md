@@ -1,8 +1,8 @@
 # club-ctrl
 
 Firmware for the Waveshare ESP32-S3(-POE)-ETH-8DI-8RO board, used as a
-home-automation / venue controller for digital inputs, relay outputs, DMX512
-lighting and buzzer audio. Targets small venues, discos and clubs.
+home-automation / venue controller for DMX512 lighting, buzzer audio,
+relay outputs and digital inputs. Targets small venues, discos and clubs.
 
 ## Use Cases
 
@@ -23,85 +23,132 @@ Elevator, entry, exit.
 
 ### DMX512 lighting
 
-Drive a moving-head fixture (currently a Thomann PicoSpot 45 in 9-channel mode)
-over RS485 from UART1. Per-song, time-keyframed light shows are dispatched
-together with buzzer playback via the `party` shell command.
+Drives two Thomann PicoSpot 45 moving heads (9-channel mode) over RS485 from
+UART1, using the shared `dmx-z` driver (TX only). Per-song, time-keyframed
+light shows are dispatched together with buzzer playback via the `party`
+shell command. Remote control arrives over MQTT (`dmx/#`).
 
 ### Buzzer audio
 
 Passive piezo buzzer driven by the LEDC PWM peripheral through Zephyr's
-`pwm-buzzer` subsystem. Plays note-timed melodies from `sound/songs.c`.
+`pwm-buzzer` subsystem. Plays note-timed melodies from `songs.c`.
 
 ## Architecture
 
 ### Hardware
 
 - **MCU**: ESP32-S3 (procpu).
-- **DMX out**: UART1 → RS485 transceiver (TX = GPIO17, RX = GPIO18). TXD is
-  inverted at the pin matrix to compensate for A/B convention on the
+- **DMX out**: UART1 → RS485 transceiver (TX = GPIO17 inverted, RX = GPIO18).
+  TXD is inverted at the pin matrix to compensate for the A/B convention on the
   Waveshare transceiver vs. DMX XLR pin 2/3.
-- **Buzzer**: LEDC channel 0 → GPIO46 (pwm-buzzer).
-- **Ethernet**: W5500 over SPI.
-- **I²C**: PCA9538 GPIO expander (relays), PCF85063A RTC.
-- **SD**: ESP32 SDHC.
+- **Buzzer**: LEDC channel 0 → GPIO46 (`pwm-buzzer`).
+- **Ethernet**: W5500 over SPI (static IPv4 `192.168.2.133`, DHCP disabled).
+- **I²C**: PCA9538 GPIO expander (relay outputs), PCF85063A RTC.
+- **SD**: ESP32 SDHC (configuration, logs).
 
-### Software modules (`src/modules/`)
+### Software modules
 
 | Module | Purpose |
 |---|---|
-| `output/dmx/` | DMX512 TX driver, 40 Hz refresh, universe buffer, `mh` shell for the moving head. |
-| `output/sound/` | Buzzer playback thread, note tables (`songs.c`), startup chime, `sound` shell. |
-| `show/` | Time-keyframed lighting-show player. Synchronises with buzzer via a unified `party` shell. |
-| `config/`, `diag/`, `input/`, `led/`, `logging/`, `net/`, `ota/`, `sd/`, `sec/`, `time/` | Scaffolding for the remaining board features (see individual dirs). |
+| `src/modules/output/dmx/` | PicoSpot 45 9-channel fixture driver (two heads), `mh` shell. |
+| `src/modules/output/sound/` | Buzzer playback thread, note tables (`songs.c`), startup chime, `sound` shell. |
+| `src/modules/show/` | Time-keyframed light-show player (`shows.c`), `party` shell. |
+| `src/modules/net/` | MQTT subscriber — connects to the broker and subscribes `dmx/#`. |
+| `src/modules/config/` | SD-card configuration loader (`club-ctrl.json`, `creds.json`). |
+| `src/modules/zbus/` | zbus channels that decouple networking, inputs and outputs. |
+| `../dmx-z/` | Shared DMX512 driver (transmitter half, `dmx_z_tx.c`). |
 
-### Networking (planned)
+### Moving-head DMX map (PicoSpot 45, 9-channel)
 
-- Ethernet (W5500) with DHCP, static-IP fallback.
-- DNS client.
-- REST / MQTT server + web UI.
-- Auth (device credentials from SD).
-- Firmware update (OTA module).
-- Heartbeat via webhook / MQTT.
+Head 0 starts at DMX address **1**, head 1 at address **10** (9 channels each,
+no overlap). Channel offsets relative to the start address:
 
-### Storage / time
+| Offset | Channel | Range |
+|--------|---------|-------|
+| 1 | Pan coarse | 0..255 → 0°..540° |
+| 2 | Tilt coarse | 0..255 → 0°..200° |
+| 3 | Pan fine | 16-bit LSB (held 0) |
+| 4 | Tilt fine | 16-bit LSB (held 0) |
+| 5 | Motor speed | 0 = fast .. 255 = slow |
+| 6 | Color wheel | bands of 11 / 88..175 split / 176..255 rotate |
+| 7 | Gobo | 0..124 select / 125..249 shake / 250..255 rotate |
+| 8 | Dimmer | 0..255 = 0..100% |
+| 9 | Shutter | 0..9 open / 10..255 strobe 1..25 Hz |
 
-- **SD card**: logs, configuration, credentials.
-- **RTC**: PCF85063A with battery backup, disciplined by NTP once network is up.
+### Networking
+
+- Ethernet (W5500) with static IPv4 `192.168.2.133/24`, gateway `192.168.2.1`
+  (`prj.conf`, DHCP disabled). Wi-Fi is disabled (`CONFIG_WIFI=n`).
+- MQTT subscriber: connects to the broker, subscribes `dmx/#`, retries every
+  3 s until CONNACK.
+
+## MQTT topics
+
+All DMX control arrives via MQTT. club-ctrl subscribes `dmx/#` and routes:
+
+| Topic | Action |
+|-------|--------|
+| `dmx/mh/1/<param>` | Moving head 1 (head 0) — `<param>` = `color`, `dimmer`, `strobe`, `pan`, `tilt`, `gobo`, `motor`, `home`, `blackout` |
+| `dmx/mh/10/<param>` | Moving head 2 (head 1) — same `<param>` set |
+| `dmx/fixture/<addr>` | Raw DMX slot write (`<addr>` = channel 1..504) for the relay fixture |
+| legacy flat topics (`dmx/color`, `dmx/dimmer`, …) | Mapped to head 0 (addr 1) |
+
+## Startup & system dependencies
+
+Boot order in `src/main.c`:
+
+| # | Step | Depends on |
+|---|------|-----------|
+| 1 | USB-serial console (`usb_serial`) | — (hard requirement; aborts if absent) |
+| 2 | Boot button (GPIO interrupt) + WS2812 LED strip + piezo buzzer | on-board peripherals |
+| 3 | `config_init()` — reads `club-ctrl.json` / `creds.json` from SD | SD card (optional; falls back to compiled defaults) |
+| 4 | `dmx_tx_init()` + `mh_set_addr()` | RS485 bus (downstream: MH #1 → MH #2 → dmx-fixture) |
+| 5 | `sound_init()` + startup chime | buzzer (LEDC PWM) |
+| 6 | `show_init()` | — |
+| 7 | `mqtt_subscriber_init()` — connects to broker, subscribes `dmx/#` | MQTT broker `192.168.2.128:1883` (anonymous) |
+| 8 | Ethernet W5500 | network + MQTT broker reachability |
+| 9 | PCF85063A RTC + PCA9538 relay expander | on-board I²C bus |
+
+**Network identity**: static IPv4 `192.168.2.133` (`prj.conf`, DHCP disabled).
+
+**Key external dependencies**:
+- **MQTT broker** at `192.168.2.128:1883` (mosquitto, anonymous access). The
+  `mqtt_sub` thread keeps retrying every 3 s until CONNACK.
+- **DMX512 bus**: club-ctrl is the RS485 transmitter. Its UART1 TX drives the
+  daisy-chain; the moving heads and the relay fixture are downstream receivers.
 
 ## Shell commands
 
-Once flashed, connect the serial console. Commands available:
-
 ```
-mh pan <deg>          # 0..540
-mh tilt <deg>         # 0..270
-mh dimmer <0-255>
-mh color <0-255>      # PicoSpot colour-wheel index
-mh gobo <0-255>
-mh strobe <0-255>     # 0-9 = open, 10-255 = strobe
-mh motor <0-255>      # movement speed / smoothing
-mh home
+mh pan <0..540>
+mh tilt <0..200>
+mh motor <0..255>         # 0 = fast, 255 = slow
+mh color <name|0..255>    # name = white red orange yellow green blue cyan purple
+mh dimmer <0..255>
+mh gobo <0..255>
+mh strobe <0..255>        # 0..9 open, 10..255 = 1..25 Hz
+mh addr <1..504>          # set DMX start address (head 0)
+mh home                   # recenter, white, full
 mh blackout
-mh raw <ch> <val>
-mh flood
+mh show                   # print current state
+mh flood                  # set slots 1..16 = 255
 
-sound play <song>
+dmx raw <ch> <val>        # write a raw DMX slot
+
+sound play <sandstorm|chime|rickroll|nggyu>
 sound stop
 
-party <song>          # start song + matching light show
+party <sandstorm|song|rickroll|nggyu|blue|lamour|rhythm|dota>
 party stop
 ```
 
-Songs currently wired: see `src/modules/output/sound/songs.c` and
+Songs and light shows are defined in `src/modules/output/sound/songs.c` and
 `src/modules/show/shows.c`.
 
 ## SD Card Configuration
 
-SD card config loading is planned but not yet implemented. When done,
-configuration will follow the same pattern as club-display using JSON files
-on a FAT32 SD card at `/SD:`.
-
-Planned files:
+At boot the firmware reads two optional JSON files from the FAT32 SD card
+(`/SD:`); absent or unparseable files fall back to compiled defaults.
 
 ### `/SD:/club-ctrl.json`
 
@@ -136,19 +183,11 @@ Planned files:
 
 Zephyr workspace under `~/zephyrproject`, Zephyr SDK, west, esptool.
 
-```powershell
-# Windows
-%HOME%/zephyrproject/.venv/Scripts/Activate.ps1
-```
-
 ```bash
-# Linux
 source ~/zephyrproject/.venv/bin/activate
 ```
 
-### Fetch Espressif blobs (once)
-
-WiFi and BLE stacks require binary blobs:
+### Fetch Espressif HAL (once)
 
 ```bash
 west blobs fetch hal_espressif
@@ -164,17 +203,13 @@ west build --board esp32s3_eth_8di_8ro/esp32s3/procpu \
            /path/to/club-ctrl
 ```
 
-Windows equivalent:
-
-```powershell
-west build --board esp32s3_eth_8di_8ro/esp32s3/procpu --build-dir N:\b
-```
+> Note: club-ctrl references the shared `dmx-z` module as a sibling directory
+> (`add_subdirectory(../dmx-z ...)`). Check out `dmx-z` next to `club-ctrl`.
 
 ### Flash
 
 ```bash
-west flash --build-dir /tmp/b --esp-device /dev/ttyACM0   # Linux
-west flash --build-dir N:\b  --esp-device COM4            # Windows
+west flash --build-dir /tmp/b --esp-device /dev/ttyACM0
 ```
 
 The serial monitor must be disconnected before flashing.
@@ -182,11 +217,8 @@ The serial monitor must be disconnected before flashing.
 ### Serial monitor
 
 ```bash
-west espressif monitor -p /dev/ttyACM0    # Linux
-west espressif monitor -p COM4            # Windows
+west espressif monitor -p /dev/ttyACM0
 ```
-
-Disconnect on Windows: `CTRL+T`, then `CTRL+X`.
 
 ## License
 

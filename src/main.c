@@ -21,12 +21,12 @@ LOG_MODULE_REGISTER(main);
 #include <zephyr/sys/util.h>
 
 #include "modules/config/config.h"
-#include "modules/output/dmx/dmx.h"
+#include <dmx_z.h>
 #include "modules/output/dmx/fixture.h"
 #include "modules/output/sound/sound.h"
 #include "modules/show/show.h"
 #include "modules/net/mqtt_subscriber.h"
-#include "modules/net/udp_server.h"
+#include "modules/zbus/ctrl_zbus.h"
 
 #define STRIP_NODE DT_ALIAS(led_strip)
 
@@ -173,26 +173,28 @@ int main(void)
 	config_init();
 
 	/* ── DMX512 transmitter (UART1, RS485, 40 Hz refresh) ────────── */
-	ret = dmx_init();
+	ret = dmx_tx_init();
 	if (ret != 0) {
-		LOG_ERR("dmx_init failed: %d", ret);
+		LOG_ERR("dmx_tx_init failed: %d", ret);
 	}
-	mh_set_addr(config_dmx_start_addr());
+	mh_set_addr(0, config_dmx_start_addr());
 
 	/* ── Buzzer song player (cooperative thread, prio 9) ─────────── */
 	ret = sound_init();
 	if (ret != 0) {
 		LOG_ERR("sound_init failed: %d", ret);
 	} else {
-		sound_play(startup_chime, startup_chime_len);
+		struct sound_cmd cmd = { .type = SOUND_CMD_PLAY,
+					 .song = startup_chime,
+					 .len = startup_chime_len };
+		zbus_chan_pub(&sound_chan, &cmd, K_NO_WAIT);
 	}
 
 	/* ── Light-show runner (cooperative thread, prio 8) ──────────── */
 	show_init();
 
-	/* ── Network servers (MQTT subscriber + UDP command server) ──── */
+	/* ── Network servers (MQTT subscriber) ──── */
 	mqtt_subscriber_init();
-	udp_server_init();
 
 	/* ── Ethernet (W5500 over SPI) ────────────────────────────────── */
 	if (device_is_ready(w5500_device))

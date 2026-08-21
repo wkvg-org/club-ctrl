@@ -3,8 +3,8 @@
  */
 
 #include "mqtt_subscriber.h"
-#include "../output/dmx/fixture.h"
 #include "../config/config.h"
+#include "../zbus/ctrl_zbus.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/net/socket.h>
@@ -72,7 +72,7 @@ static void mqtt_evt_handler(struct mqtt_client *c, const struct mqtt_evt *evt)
 	case MQTT_EVT_PUBLISH: {
 		const struct mqtt_publish_param *p = &evt->param.publish;
 		char payload[32] = {0};
-		char topic[32] = {0};
+		char topic[40] = {0};
 
 		uint16_t plen = p->message.payload.len;
 		if (plen > sizeof(payload) - 1) {
@@ -89,57 +89,104 @@ static void mqtt_evt_handler(struct mqtt_client *c, const struct mqtt_evt *evt)
 			tlen = sizeof(topic) - 1;
 		}
 		memcpy(topic, p->message.topic.topic.utf8, tlen);
+		topic[tlen] = '\0';
 
 		long val = 0;
 		if (plen > 0) {
 			val = strtol(payload, NULL, 10);
 		}
 
-		/*
-		 * Parse MQTT topic suffix (e.g. "dmx/color" → colour,
-		 * "dmx/dimmer" → dimmer) and update g_mh_state accordingly.
-		 * Topic wildcard "dmx/#" captures all sub-topics.
-		 */
-		if (strstr(topic, "color")) {
-			g_mh_state.color = (uint8_t)val;
-			mh_set(&g_mh_state);
-			printk("[MQTT] color = %ld\n", val);
-			LOG_WRN("club-ctrl: MQTT DMX color = %ld", val);
-		} else if (strstr(topic, "dimmer")) {
-			g_mh_state.dimmer = (uint8_t)val;
-			mh_set(&g_mh_state);
-			printk("[MQTT] dimmer = %ld\n", val);
-			LOG_WRN("club-ctrl: MQTT DMX dimmer = %ld", val);
-		} else if (strstr(topic, "strobe")) {
-			g_mh_state.strobe = (uint8_t)val;
-			mh_set(&g_mh_state);
-			printk("[MQTT] strobe = %ld\n", val);
-			LOG_WRN("club-ctrl: MQTT DMX strobe = %ld", val);
-		} else if (strstr(topic, "pan")) {
-			g_mh_state.pan_deg = (uint16_t)val;
-			mh_set(&g_mh_state);
-			printk("[MQTT] pan = %ld\n", val);
-			LOG_WRN("club-ctrl: MQTT DMX pan = %ld", val);
-		} else if (strstr(topic, "tilt")) {
-			g_mh_state.tilt_deg = (uint8_t)val;
-			mh_set(&g_mh_state);
-			printk("[MQTT] tilt = %ld\n", val);
-			LOG_WRN("club-ctrl: MQTT DMX tilt = %ld", val);
-		} else if (strstr(topic, "home")) {
-			mh_home();
-			g_mh_state = (struct mh_state){
-				.pan_deg = 270, .tilt_deg = 100,
-				.motor_speed = 0, .color = MH_COL_WHITE,
-				.dimmer = 255,
-			};
-			printk("[MQTT] home\n");
-			LOG_WRN("club-ctrl: MQTT DMX home");
-		} else if (strstr(topic, "blackout")) {
-			mh_blackout();
-			g_mh_state.dimmer = 0;
-			printk("[MQTT] blackout\n");
-			LOG_WRN("club-ctrl: MQTT DMX blackout");
+		/* ── dmx/mh/<addr>/<param> — moving-head control ─────────── */
+		if (strncmp(topic, "dmx/mh/", 7) == 0) {
+			char *p1 = topic + 7;          /* <addr>/<param> */
+			char *slash = strchr(p1, '/');
+			if (slash == NULL) {
+				break;
+			}
+			*slash = '\0';
+			long addr = strtol(p1, NULL, 10);
+			const char *param = slash + 1;
+
+			uint8_t head;
+			if (addr == 1) {
+				head = 0;
+			} else if (addr == 10) {
+				head = 1;
+			} else {
+				LOG_WRN("unknown MH addr %ld", addr);
+				break;
+			}
+
+			struct dmx_ctrl_cmd cmd = { .head = head, .val = (uint16_t)val };
+
+			if (strcmp(param, "color") == 0) {
+				cmd.type = DMX_CTRL_COLOR;
+			} else if (strcmp(param, "dimmer") == 0) {
+				cmd.type = DMX_CTRL_DIMMER;
+			} else if (strcmp(param, "strobe") == 0) {
+				cmd.type = DMX_CTRL_STROBE;
+			} else if (strcmp(param, "pan") == 0) {
+				cmd.type = DMX_CTRL_PAN;
+			} else if (strcmp(param, "tilt") == 0) {
+				cmd.type = DMX_CTRL_TILT;
+			} else if (strcmp(param, "gobo") == 0) {
+				cmd.type = DMX_CTRL_GOBO;
+			} else if (strcmp(param, "motor") == 0) {
+				cmd.type = DMX_CTRL_MOTOR;
+			} else if (strcmp(param, "home") == 0) {
+				cmd.type = DMX_CTRL_HOME;
+			} else if (strcmp(param, "blackout") == 0) {
+				cmd.type = DMX_CTRL_BLACKOUT;
+			} else {
+				LOG_WRN("unknown MH param %s", param);
+				break;
+			}
+
+			printk("[MQTT] MH addr %ld %s = %ld\n", addr, param, val);
+			LOG_WRN("club-ctrl: MQTT MH addr %ld %s = %ld", addr, param, val);
+			zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
+			break;
 		}
+
+		/* ── dmx/fixture/<addr> — relay fixture control ───────────── */
+		if (strncmp(topic, "dmx/fixture/", 12) == 0) {
+			long addr = strtol(topic + 12, NULL, 10);
+			if (addr < 1 || addr > 504) {
+				break;
+			}
+			struct dmx_ctrl_cmd relay_cmd = {
+				.type = DMX_CTRL_RAW,
+				.ch   = (uint16_t)addr,
+				.val  = (uint16_t)val,
+			};
+			zbus_chan_pub(&dmx_ctrl_chan, &relay_cmd, K_NO_WAIT);
+			printk("[MQTT] fixture addr %ld = %ld\n", addr, val);
+			LOG_WRN("club-ctrl: MQTT fixture addr %ld = %ld", addr, val);
+			break;
+		}
+
+		/* ── Legacy flat topics (dmx/color etc.) → head 0 (addr 1) ── */
+		struct dmx_ctrl_cmd cmd = { .head = 0, .val = (uint16_t)val };
+
+		if (strstr(topic, "color")) {
+			cmd.type = DMX_CTRL_COLOR;
+		} else if (strstr(topic, "dimmer")) {
+			cmd.type = DMX_CTRL_DIMMER;
+		} else if (strstr(topic, "strobe")) {
+			cmd.type = DMX_CTRL_STROBE;
+		} else if (strstr(topic, "pan")) {
+			cmd.type = DMX_CTRL_PAN;
+		} else if (strstr(topic, "tilt")) {
+			cmd.type = DMX_CTRL_TILT;
+		} else if (strstr(topic, "home")) {
+			cmd.type = DMX_CTRL_HOME;
+		} else if (strstr(topic, "blackout")) {
+			cmd.type = DMX_CTRL_BLACKOUT;
+		} else {
+			break;
+		}
+
+		zbus_chan_pub(&dmx_ctrl_chan, &cmd, K_NO_WAIT);
 		break;
 	}
 

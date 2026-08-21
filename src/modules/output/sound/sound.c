@@ -7,6 +7,7 @@
  */
 
 #include "sound.h"
+#include "../../zbus/ctrl_zbus.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -129,28 +130,35 @@ void sound_stop(void)
 
 static int cmd_sound_play(const struct shell *sh, size_t argc, char **argv)
 {
+	struct sound_cmd cmd = { .type = SOUND_CMD_PLAY };
+
 	if (argc < 2) {
 		shell_error(sh, "usage: sound play <sandstorm|chime>");
 		return -EINVAL;
 	}
 	if (strcmp(argv[1], "sandstorm") == 0) {
-		return sound_play(sandstorm, sandstorm_len);
+		cmd.song = sandstorm;
+		cmd.len  = sandstorm_len;
+	} else if (strcmp(argv[1], "chime") == 0) {
+		cmd.song = startup_chime;
+		cmd.len  = startup_chime_len;
+	} else if (strcmp(argv[1], "rickroll") == 0 ||
+		   strcmp(argv[1], "nggyu") == 0) {
+		cmd.song = never_gonna;
+		cmd.len  = never_gonna_len;
+	} else {
+		shell_error(sh, "unknown song '%s'", argv[1]);
+		return -EINVAL;
 	}
-	if (strcmp(argv[1], "chime") == 0) {
-		return sound_play(startup_chime, startup_chime_len);
-	}
-	if (strcmp(argv[1], "rickroll") == 0 ||
-	    strcmp(argv[1], "nggyu") == 0) {
-		return sound_play(never_gonna, never_gonna_len);
-	}
-	shell_error(sh, "unknown song '%s'", argv[1]);
-	return -EINVAL;
+	zbus_chan_pub(&sound_chan, &cmd, K_NO_WAIT);
+	return 0;
 }
 
 static int cmd_sound_stop(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(sh); ARG_UNUSED(argc); ARG_UNUSED(argv);
-	sound_stop();
+	struct sound_cmd cmd = { .type = SOUND_CMD_STOP };
+	zbus_chan_pub(&sound_chan, &cmd, K_NO_WAIT);
 	return 0;
 }
 

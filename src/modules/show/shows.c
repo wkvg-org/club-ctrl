@@ -7,6 +7,7 @@
 
 #include "show.h"
 #include "../output/sound/sound.h"
+#include "../zbus/ctrl_zbus.h"
 
 #include <zephyr/shell/shell.h>
 #include <zephyr/sys/util.h>
@@ -217,8 +218,14 @@ static int cmd_party(const struct shell *sh, size_t argc, char **argv)
 	}
 	for (size_t i = 0; i < ARRAY_SIZE(pairs); i++) {
 		if (strcmp(argv[1], pairs[i].name) == 0) {
-			show_play(pairs[i].show, *pairs[i].show_len);
-			sound_play(pairs[i].song, *pairs[i].song_len);
+			struct show_cmd scmd = { .type = SHOW_CMD_PLAY,
+						 .frames = pairs[i].show,
+						 .len = *pairs[i].show_len };
+			zbus_chan_pub(&show_chan, &scmd, K_NO_WAIT);
+			struct sound_cmd scmd2 = { .type = SOUND_CMD_PLAY,
+						  .song = pairs[i].song,
+						  .len = *pairs[i].song_len };
+			zbus_chan_pub(&sound_chan, &scmd2, K_NO_WAIT);
 			shell_print(sh, "party: %s", pairs[i].name);
 			return 0;
 		}
@@ -230,8 +237,10 @@ static int cmd_party(const struct shell *sh, size_t argc, char **argv)
 static int cmd_party_stop(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(sh); ARG_UNUSED(argc); ARG_UNUSED(argv);
-	sound_stop();
-	show_stop();
+	struct sound_cmd scmd = { .type = SOUND_CMD_STOP };
+	zbus_chan_pub(&sound_chan, &scmd, K_NO_WAIT);
+	struct show_cmd scmd2 = { .type = SHOW_CMD_STOP };
+	zbus_chan_pub(&show_chan, &scmd2, K_NO_WAIT);
 	return 0;
 }
 
