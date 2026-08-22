@@ -13,7 +13,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../output/dmx/fixture.h"
+#include "../output/dmx/moving_head.h"
 
 struct show_frame {
 	uint32_t        at_ms;

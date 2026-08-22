@@ -2,17 +2,14 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * MQTT subscriber for club-ctrl DMX control. Connects to the MQTT
- * broker at 192.168.2.128:1883, subscribes to dmx/#, and drives the
- * moving head via fixture.h on received messages.
+ * broker, subscribes to dmx/#, and routes messages to registered DMX
+ * devices via the device registry.
  *
  * Topics (plain text payloads):
- *   dmx/color     <0..255>
- *   dmx/dimmer    <0..255>
- *   dmx/strobe    <0..255>
- *   dmx/pan       <0..540>
- *   dmx/tilt      <0..200>
- *   dmx/home      (ignored)
- *   dmx/blackout  (ignored)
+ *   dmx/<device>/<addr>/<param>   routed device control, e.g.
+ *     dmx/mh/1/color  dmx/mh/10/pan  dmx/par/19/red
+ *   dmx/fixture/<addr>            raw DMX slot write (relay fixture)
+ *   legacy flat topics (dmx/color, dmx/dimmer, ...) → moving head 0
  */
 
 #ifndef MQTT_SUBSCRIBER_H_

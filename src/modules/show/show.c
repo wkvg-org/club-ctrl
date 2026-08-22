@@ -6,7 +6,7 @@
  */
 
 #include "show.h"
-#include "../output/dmx/fixture.h"
+#include "../output/dmx/moving_head.h"
 
 #include <zephyr/kernel.h>
 

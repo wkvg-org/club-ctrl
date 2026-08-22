@@ -15,8 +15,8 @@
  *   9  Shutter      0..9 open / 10..255 strobe 1..25 Hz
  */
 
-#ifndef FIXTURE_H_
-#define FIXTURE_H_
+#ifndef MOVING_HEAD_H_
+#define MOVING_HEAD_H_
 
 #include <stdint.h>
 
@@ -45,6 +45,22 @@ struct mh_state {
 	uint8_t  strobe;       /* 0=open, 10..255 = 1..25 Hz */
 };
 
+/* Device-specific parameters (routed through the device registry). */
+enum mh_param {
+	MH_PARAM_PAN = 0,
+	MH_PARAM_TILT,
+	MH_PARAM_COLOR,
+	MH_PARAM_DIMMER,
+	MH_PARAM_GOBO,
+	MH_PARAM_STROBE,
+	MH_PARAM_MOTOR,
+	MH_PARAM_ADDR,
+	MH_PARAM_HOME,
+	MH_PARAM_BLACKOUT,
+};
+
+void moving_head_init(void);
+
 void mh_set(uint8_t head, const struct mh_state *s);
 void mh_home(uint8_t head);
 void mh_blackout(uint8_t head);
@@ -53,4 +69,4 @@ void mh_set_addr(uint8_t head, uint16_t addr);
 /* Shared state for the shell and the network server. */
 extern struct mh_state g_mh_state[MH_MAX_HEADS];
 
-#endif /* FIXTURE_H_ */
+#endif /* MOVING_HEAD_H_ */

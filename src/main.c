@@ -22,7 +22,8 @@ LOG_MODULE_REGISTER(main);
 
 #include "modules/config/config.h"
 #include <dmx_z.h>
-#include "modules/output/dmx/fixture.h"
+#include "modules/output/dmx/moving_head.h"
+#include "modules/output/dmx/rgbw_par.h"
 #include "modules/output/sound/sound.h"
 #include "modules/show/show.h"
 #include "modules/net/mqtt_subscriber.h"
@@ -177,6 +178,10 @@ int main(void)
 	if (ret != 0) {
 		LOG_ERR("dmx_tx_init failed: %d", ret);
 	}
+
+	/* Register DMX devices and apply configured start addresses. */
+	moving_head_init();
+	rgbw_par_init();
 	mh_set_addr(0, config_dmx_start_addr());
 
 	/* ── Buzzer song player (cooperative thread, prio 9) ─────────── */

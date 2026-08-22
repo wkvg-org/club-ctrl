@@ -11,26 +11,24 @@
 #include <zephyr/zbus/zbus.h>
 #include <stdint.h>
 
-/* ── DMX fixture command ───────────────────────────────────────────── */
+/* ── DMX device command ────────────────────────────────────────────── */
 
 enum dmx_ctrl_cmd_type {
-	DMX_CTRL_PAN = 0,
-	DMX_CTRL_TILT,
-	DMX_CTRL_COLOR,
-	DMX_CTRL_DIMMER,
-	DMX_CTRL_GOBO,
-	DMX_CTRL_STROBE,
-	DMX_CTRL_MOTOR,
-	DMX_CTRL_ADDR,
-	DMX_CTRL_HOME,
-	DMX_CTRL_BLACKOUT,
-	DMX_CTRL_RAW,
+	DMX_CTRL_DEV = 0,  /* route to a device via the device registry */
+	DMX_CTRL_RAW,       /* raw universe slot write (ch + val) */
 };
 
+/*
+ * Generic command carried on the bus. For DMX_CTRL_DEV the message is
+ * routed by dmx_device_dispatch(dev, inst, param, val); `param` is a
+ * device-specific parameter id (see each device's enum, e.g. mh_param).
+ */
 struct dmx_ctrl_cmd {
-	uint8_t  type;
-	uint8_t  head;   /* moving-head index (0 or 1) */
-	uint16_t val;    /* primary argument */
+	uint8_t  type;   /* enum dmx_ctrl_cmd_type */
+	uint8_t  dev;    /* enum dmx_device_id (DEV only) */
+	uint8_t  inst;   /* instance index within the device (DEV only) */
+	uint16_t param;  /* device-specific parameter id (DEV only) */
+	uint16_t val;    /* argument */
 	uint16_t ch;     /* channel number (RAW only) */
 };
 

@@ -9,7 +9,7 @@
 
 #include "ctrl_zbus.h"
 
-#include "../output/dmx/fixture.h"
+#include "../output/dmx/device.h"
 #include <dmx_z.h>
 
 /* exposed by the modules, not in headers but called directly */
@@ -28,54 +28,10 @@ struct show_frame;
 static void dmx_ctrl_listener(const struct zbus_channel *chan)
 {
 	const struct dmx_ctrl_cmd *cmd = zbus_chan_const_msg(chan);
-	uint8_t head = cmd->head;
-
-	if (head >= MH_MAX_HEADS) {
-		return;
-	}
 
 	switch (cmd->type) {
-	case DMX_CTRL_PAN:
-		g_mh_state[head].pan_deg = cmd->val;
-		mh_set(head, &g_mh_state[head]);
-		break;
-	case DMX_CTRL_TILT:
-		g_mh_state[head].tilt_deg = (uint8_t)cmd->val;
-		mh_set(head, &g_mh_state[head]);
-		break;
-	case DMX_CTRL_COLOR:
-		g_mh_state[head].color = (uint8_t)cmd->val;
-		mh_set(head, &g_mh_state[head]);
-		break;
-	case DMX_CTRL_DIMMER:
-		g_mh_state[head].dimmer = (uint8_t)cmd->val;
-		mh_set(head, &g_mh_state[head]);
-		break;
-	case DMX_CTRL_GOBO:
-		g_mh_state[head].gobo = (uint8_t)cmd->val;
-		mh_set(head, &g_mh_state[head]);
-		break;
-	case DMX_CTRL_STROBE:
-		g_mh_state[head].strobe = (uint8_t)cmd->val;
-		mh_set(head, &g_mh_state[head]);
-		break;
-	case DMX_CTRL_MOTOR:
-		g_mh_state[head].motor_speed = (uint8_t)cmd->val;
-		mh_set(head, &g_mh_state[head]);
-		break;
-	case DMX_CTRL_ADDR:
-		mh_set_addr(head, cmd->val);
-		break;
-	case DMX_CTRL_HOME:
-		mh_home(head);
-		g_mh_state[head] = (struct mh_state){
-			.pan_deg = 270, .tilt_deg = 100,
-			.color = 5, .dimmer = 255,
-		};
-		break;
-	case DMX_CTRL_BLACKOUT:
-		mh_blackout(head);
-		g_mh_state[head].dimmer = 0;
+	case DMX_CTRL_DEV:
+		dmx_device_dispatch(cmd->dev, cmd->inst, cmd->param, cmd->val);
 		break;
 	case DMX_CTRL_RAW:
 		dmx_tx_set_slot(cmd->ch, (uint8_t)cmd->val);
@@ -86,7 +42,8 @@ static void dmx_ctrl_listener(const struct zbus_channel *chan)
 ZBUS_LISTENER_DEFINE(dmx_ctrl_lis, dmx_ctrl_listener);
 ZBUS_CHAN_DEFINE(dmx_ctrl_chan, struct dmx_ctrl_cmd, NULL, NULL,
 		 ZBUS_OBSERVERS(dmx_ctrl_lis),
-		 ZBUS_MSG_INIT(.type = 0, .head = 0, .val = 0, .ch = 0));
+		 ZBUS_MSG_INIT(.type = 0, .dev = 0, .inst = 0,
+			       .param = 0, .val = 0, .ch = 0));
 
 /* ── Sound command listener ────────────────────────────────────────── */
 
